@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { startLogin } from "@/lib/actions/auth";
+import { startLogin } from "@/lib/actions/start-login";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
