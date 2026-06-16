@@ -2,13 +2,13 @@
 
 import * as React from "react";
 
-import { demoLoginAsDemoAdmin, devLoginAsDemo, startLogin } from "@/lib/actions/auth";
+import { startLogin } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type State = { ok: false; error: string } | { ok: true } | null;
 
-export function LoginForm({ showDemoOneClick }: { showDemoOneClick?: boolean }) {
+export function LoginForm({ showDemoOneClick: _showDemoOneClick }: { showDemoOneClick?: boolean }) {
   const [state, formAction, isPending] = React.useActionState<State, FormData>(
     async (_prevState, formData) => {
       return (await startLogin(formData)) as any;
@@ -37,31 +37,9 @@ export function LoginForm({ showDemoOneClick }: { showDemoOneClick?: boolean }) 
         </Button>
       </form>
 
-      {showDemoOneClick ? (
-        <div className="border-t border-border pt-3">
-          <form action={demoLoginAsDemoAdmin}>
-            <Button variant="secondary" type="submit" className="w-full">
-              Demo: One‑click login
-            </Button>
-          </form>
-          <div className="mt-2 text-xs text-fg/60">
-            Uses `demo-admin@mfcms.local` (created by demo seed).
-          </div>
-        </div>
-      ) : null}
-
-      {process.env.NODE_ENV !== "production" ? (
-        <div className="border-t border-border pt-3">
-          <form action={devLoginAsDemo}>
-            <Button variant="secondary" type="submit" className="w-full">
-              Dev: Login as demo admin
-            </Button>
-          </form>
-          <div className="mt-2 text-xs text-fg/60">
-            Uses `demo-admin@mfcms.local` (created by `npm run db:seed`).
-          </div>
-        </div>
-      ) : null}
+      <div className="border-t border-border pt-3 text-xs text-fg/60">
+        Demo admin: demo-admin@mfcms.local / Password123!
+      </div>
     </div>
   );
 }
