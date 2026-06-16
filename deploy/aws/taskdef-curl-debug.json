@@ -1,0 +1,30 @@
+{
+  "family": "mfcms-curl-debug",
+  "executionRoleArn": "arn:aws:iam::853583157803:role/mfcmsEcsExpressExecutionRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "curl",
+      "image": "curlimages/curl:8.7.1",
+      "essential": true,
+      "command": [
+        "-IL",
+        "--max-redirs",
+        "25",
+        "https://mf-489cc45d7fcb4263a81276322300958a.ecs.us-east-2.on.aws/login"
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/mfcms-builder",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "curl-debug"
+        }
+      }
+    }
+  ]
+}
+

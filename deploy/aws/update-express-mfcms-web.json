@@ -1,0 +1,38 @@
+{
+  "serviceArn": "arn:aws:ecs:us-east-2:853583157803:service/default/mfcms-web",
+  "healthCheckPath": "/ping",
+  "networkConfiguration": {
+    "securityGroups": ["sg-0e1771ca4818d5aaf"],
+    "subnets": ["subnet-01f00542e813a8b92", "subnet-0ea04bcdbb3e39ec2", "subnet-05b28c12f2b13772a"]
+  },
+  "primaryContainer": {
+    "image": "853583157803.dkr.ecr.us-east-2.amazonaws.com/mfcms-builder:v20260505-1240-amd64",
+    "containerPort": 3010,
+    "awsLogsConfiguration": {
+      "logGroup": "/ecs/mfcms-builder",
+      "logStreamPrefix": "ecs"
+    },
+    "environment": [
+      { "name": "MFCMS_ENV", "value": "demo" },
+      { "name": "ALLOW_INSECURE_AUTH", "value": "true" },
+      { "name": "MFA_DISABLED", "value": "true" },
+      { "name": "SEED_DEMO_DATA", "value": "true" }
+    ],
+    "secrets": [
+      {
+        "name": "DATABASE_URL",
+        "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/DATABASE_URL-PC0Kw3"
+      },
+      {
+        "name": "SESSION_SECRET",
+        "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/SESSION_SECRET-gmfJVp"
+      },
+      {
+        "name": "PASSWORD_PEPPER",
+        "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/PASSWORD_PEPPER-cCky9H"
+      }
+    ]
+  },
+  "cpu": "512",
+  "memory": "1024"
+}

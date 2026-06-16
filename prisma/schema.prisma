@@ -1,0 +1,1139 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  PROJECT_MANAGER
+  ACCOUNTANT
+  FIELD_AGENT
+  BANKER
+  ADMIN
+}
+
+enum QBConnectionType {
+  QBO
+  QBD
+}
+
+enum QBConnectionStatus {
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum IntegrationEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  ERROR
+}
+
+enum QbdInstructionStatus {
+  PENDING
+  ACKED
+  DONE
+  ERROR
+}
+
+enum ProjectStatus {
+  LOT_ACQUIRED
+  PLANNING
+  UNDER_CONSTRUCTION
+  COMPLETED_FOR_SALE
+  COMPLETED_FOR_RENT
+  COMPLETED
+  FOR_SALE
+  RENTAL_READY
+}
+
+enum UnitRentalStatus {
+  AVAILABLE
+  OCCUPIED
+  OFF_MARKET
+}
+
+enum CommitmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  INVOICED
+  PAID
+}
+
+enum DrawStatus {
+  DRAFT
+  READY_FOR_BANK_REVIEW
+  NEEDS_INFO
+  REJECTED
+  APPROVED
+  FUNDED
+}
+
+enum DocumentType {
+  INVOICE
+  LIEN_WAIVER
+  W9
+  COI
+  PLAN
+  PERMIT
+  ABATEMENT
+  INSPECTION
+  CONTRACT
+  OTHER
+}
+
+enum PermitStatus {
+  APPLIED
+  ISSUED
+  EXPIRED
+  CLOSED
+}
+
+enum AbatementStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  TERMINATED
+}
+
+enum ReportType {
+  PORTFOLIO_KPIS
+  COMMITMENT_SUMMARY
+  DRAW_PIPELINE
+  EXCEPTION_AGING
+  PERMIT_ABATEMENT_EXPIRATIONS
+}
+
+enum ReportCadence {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum VendorOnboardingStep {
+  BASIC
+  TAX
+  INSURANCE
+  DONE
+}
+
+enum VendorCommunicationType {
+  CALL
+  TEXT
+  EMAIL
+}
+
+enum BankCommunicationType {
+  CALL
+  TEXT
+  EMAIL
+}
+
+enum IdentifierScope {
+  PROJECT
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  llcs         LLC[]
+  qbConnections QuickBooksConnection[]
+  projects     Project[]
+  vendors      Vendor[]
+  banks        Bank[]
+  auditEvents  AuditEvent[]
+  qbTxns       QuickBooksTxn[]
+  notifications Notification[]
+  reportSchedules ReportSchedule[]
+  reminders    Reminder[]
+  orgTodos   OrgTodo[]
+  vendorCommunications VendorCommunication[]
+  bankCommunications BankCommunication[]
+  identifierDefinitions IdentifierDefinition[]
+  projectIdentifiers ProjectIdentifier[]
+}
+
+model User {
+  id            String   @id @default(cuid())
+  orgId         String
+  email         String   @unique
+  name          String?
+  phone         String?
+  role          Role
+  passwordHash  String
+  mfaEnabled    Boolean  @default(false)
+  mfaSecretEnc  String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org           Organization @relation(fields: [orgId], references: [id])
+  sessions      Session[]
+  mfaChallenges MfaChallenge[]
+  auditEvents   AuditEvent[]
+
+  bankerLoans   LoanBanker[]
+  assignedProjects ProjectAssignment[]
+
+  commitmentsCreated Commitment[]
+  updatesAuthored    ProjectUpdate[]
+
+  reportSchedulesCreated ReportSchedule[]
+  remindersCreated      Reminder[]
+  orgTodosCreated       OrgTodo[]
+  vendorCommunicationsCreated VendorCommunication[]
+  bankCommunicationsCreated BankCommunication[]
+  identifierDefinitionsCreated IdentifierDefinition[]
+  llcDocumentsCreated   LlcDocument[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+
+  user      User @relation(fields: [userId], references: [id])
+}
+
+model MfaChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user      User @relation(fields: [userId], references: [id])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  data       Json     @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  org        Organization @relation(fields: [orgId], references: [id])
+  user       User?        @relation(fields: [userId], references: [id])
+
+  @@index([orgId, createdAt])
+}
+
+model LLC {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  legalName String?
+  einEnc    String?
+  paTaxNumberEnc String?
+  establishedAt DateTime?
+  oneDriveFolderUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  qbConnections QuickBooksConnection[]
+  projects    Project[]
+  documents   LlcDocument[]
+  partners    LlcPartner[]
+
+  @@index([orgId])
+}
+
+model QuickBooksConnection {
+  id            String             @id @default(cuid())
+  orgId         String
+  llcId         String
+  type          QBConnectionType
+  status        QBConnectionStatus @default(ACTIVE)
+  displayName   String
+
+  // QBO
+  qboRealmId    String?
+  qboAccessTokenEnc  String?
+  qboRefreshTokenEnc String?
+  qboTokenExpiresAt  DateTime?
+
+  // QBD
+  qbdCompanyFileName String?
+  qbdAgentKeyEnc     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  llc       LLC          @relation(fields: [llcId], references: [id])
+  projects  Project[]
+  integrationEvents IntegrationEvent[]
+  qbdInstructions   QbdInstruction[]
+
+  @@index([orgId])
+  @@index([llcId])
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  orgId         String
+  llcId         String
+  qbConnectionId String
+
+  name          String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  zip           String
+  unitCount     Int?
+  cityNumber    String?
+  status        ProjectStatus @default(LOT_ACQUIRED)
+
+  // Budgeting (simple MVP)
+  budgetTotalCents Int? 
+
+  // QB mapping
+  qbProjectRef     String? // QBO Project ID or QBD Job ID
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization @relation(fields: [orgId], references: [id])
+  llc     LLC          @relation(fields: [llcId], references: [id])
+  qbConnection QuickBooksConnection @relation(fields: [qbConnectionId], references: [id])
+
+  commitments Commitment[]
+  updates     ProjectUpdate[]
+  documents   Document[]
+  permits     Permit[]
+  abatements  Abatement[]
+  planSets    PlanSet[]
+  inspections Inspection[]
+  loans       Loan[]
+  drawRequests DrawRequest[]
+
+  assignments ProjectAssignment[]
+  units       Unit[]
+  partners    ProjectPartner[]
+  photos      ProjectPhoto[]
+  customSections ProjectCustomSection[]
+  reminders   Reminder[]
+  identifiers ProjectIdentifier[]
+  vendorCommunications VendorCommunication[]
+  bankCommunications BankCommunication[]
+
+  @@index([orgId])
+  @@index([llcId])
+  @@index([qbConnectionId])
+}
+
+model ProjectAssignment {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([orgId])
+}
+
+model Vendor {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  email     String?
+  phone     String?
+  contactName String?
+  expertise String?
+  einEnc     String?
+
+  onboardingStep VendorOnboardingStep @default(BASIC)
+  onboardingCompletedAt DateTime?
+
+  w9Url         String?
+  insuranceUrl  String?
+
+  w9OnFile        Boolean  @default(false)
+  w9ExpiresAt     DateTime?
+  coiOnFile       Boolean  @default(false)
+  coiExpiresAt    DateTime?
+  approvedVendor  Boolean  @default(true)
+  performanceScore Float?  
+
+  qbVendorRef String? // QBO Vendor ID / QBD Vendor ID
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org        Organization @relation(fields: [orgId], references: [id])
+  commitments Commitment[]
+  communications VendorCommunication[]
+
+  @@index([orgId])
+}
+
+model VendorCommunication {
+  id        String   @id @default(cuid())
+  orgId     String
+  vendorId  String
+  projectId String?
+  createdByUserId String
+
+  type      VendorCommunicationType
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  vendor    Vendor       @relation(fields: [vendorId], references: [id])
+  project   Project?     @relation(fields: [projectId], references: [id])
+  createdBy User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([vendorId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([createdByUserId])
+}
+
+model OrgTodo {
+  id        String   @id @default(cuid())
+  orgId     String
+  createdByUserId String
+
+  body      String
+  dueAt     DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  createdBy User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, completedAt])
+  @@index([createdByUserId])
+}
+
+model IdentifierDefinition {
+  id        String   @id @default(cuid())
+  orgId     String
+  scope     IdentifierScope @default(PROJECT)
+  label     String
+  applyToAllProjects Boolean @default(false)
+  sortOrder Int @default(0)
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  createdBy User?        @relation(fields: [createdByUserId], references: [id])
+  projectValues ProjectIdentifier[]
+
+  @@unique([orgId, scope, label])
+  @@index([orgId])
+}
+
+model ProjectIdentifier {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  definitionId String
+
+  value     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id])
+  definition IdentifierDefinition @relation(fields: [definitionId], references: [id])
+
+  @@unique([projectId, definitionId])
+  @@index([orgId])
+  @@index([projectId])
+  @@index([definitionId])
+}
+
+model LlcDocument {
+  id        String   @id @default(cuid())
+  orgId     String
+  llcId     String
+  createdByUserId String
+
+  title     String
+  url       String
+
+  createdAt DateTime @default(now())
+
+  llc       LLC @relation(fields: [llcId], references: [id])
+  createdBy User @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId])
+  @@index([llcId, createdAt])
+  @@index([createdByUserId])
+}
+
+model LlcPartner {
+  id        String   @id @default(cuid())
+  orgId     String
+  llcId     String
+  partnerId String
+
+  ownershipBps Int @default(0) // 10000 = 100%
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  llc       LLC     @relation(fields: [llcId], references: [id])
+  partner   Partner @relation(fields: [partnerId], references: [id])
+
+  @@unique([llcId, partnerId])
+  @@index([orgId])
+  @@index([llcId])
+  @@index([partnerId])
+}
+
+model Commitment {
+  id            String           @id @default(cuid())
+  orgId         String
+  projectId     String
+  vendorId      String
+  createdByUserId String
+
+  code          String           @unique // Commitment Code
+  scope         String
+  costCode      String
+  agreedCents   Int
+  retainageBps  Int              @default(0) // 100 = 1%
+
+  status        CommitmentStatus @default(NOT_STARTED)
+  startDate     DateTime?
+  targetCompleteDate DateTime?
+  completedAt   DateTime?
+
+  // rollups (cached for speed; recomputed by jobs)
+  paidToDateCents Int @default(0)
+  invoicedNotPaidCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+  vendor    Vendor  @relation(fields: [vendorId], references: [id])
+  createdBy User    @relation(fields: [createdByUserId], references: [id])
+
+  invoiceRequests VendorInvoiceRequest[]
+  expectedInvoices ExpectedInvoice[]
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([vendorId])
+  @@index([createdByUserId])
+}
+
+model ExpectedInvoice {
+  id           String   @id @default(cuid())
+  orgId        String
+  commitmentId String
+  createdAt    DateTime @default(now())
+  resolvedAt   DateTime?
+
+  commitment   Commitment @relation(fields: [commitmentId], references: [id])
+
+  @@index([orgId])
+  @@index([commitmentId])
+}
+
+model VendorInvoiceRequest {
+  id           String   @id @default(cuid())
+  orgId        String
+  commitmentId String
+  tokenHash    String   @unique
+  tokenEnc     String?
+  expiresAt    DateTime
+  status       String   @default("OPEN") // OPEN|SUBMITTED|EXPIRED|CANCELLED
+
+  vendorEmail  String?
+  createdAt    DateTime @default(now())
+
+  commitment   Commitment @relation(fields: [commitmentId], references: [id])
+  uploads      VendorInvoiceUpload[]
+
+  @@index([orgId])
+  @@index([commitmentId])
+}
+
+model VendorInvoiceUpload {
+  id           String   @id @default(cuid())
+  orgId        String
+  requestId    String
+  amountCents  Int
+  notes        String?
+
+  invoiceDocId String?
+  lienWaiverDocId String?
+  w9DocId      String?
+  coiDocId     String?
+
+  qbBillRef    String?
+
+  createdAt DateTime @default(now())
+
+  request   VendorInvoiceRequest @relation(fields: [requestId], references: [id])
+
+  @@index([orgId])
+  @@index([requestId])
+}
+
+model ProjectUpdate {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  authorId  String
+  body      String
+  tags      String[]
+  photoDocIds String[]
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+  author    User    @relation(fields: [authorId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId, createdAt])
+}
+
+model Document {
+  id        String      @id @default(cuid())
+  orgId     String
+  projectId String
+
+  type      DocumentType
+  title     String
+  storageKey String
+  mimeType  String
+  sizeBytes Int
+
+  // optional metadata
+  commitmentId String?
+  vendorId     String?
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model Permit {
+  id          String      @id @default(cuid())
+  orgId       String
+  projectId   String
+
+  permitType  String
+  jurisdiction String
+  permitNumber String?
+  status      PermitStatus @default(APPLIED)
+
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+
+  checklist   Json @default("[]")
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([expiresAt])
+}
+
+model Abatement {
+  id          String        @id @default(cuid())
+  orgId       String
+  projectId   String
+
+  programName String
+  status      AbatementStatus @default(PENDING)
+  termStart   DateTime?
+  termEnd     DateTime?
+
+  checklist   Json @default("[]")
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([termEnd])
+}
+
+model PlanSet {
+  id          String   @id @default(cuid())
+  orgId       String
+  projectId   String
+
+  name        String
+  version     String
+  receivedAt  DateTime?
+  superseded  Boolean @default(false)
+
+  notes       String?
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model Inspection {
+  id          String   @id @default(cuid())
+  orgId       String
+  projectId   String
+
+  name        String
+  required    Boolean @default(true)
+  completedAt DateTime?
+  notes       String?
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model Bank {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  contactName String?
+  contactEmail String?
+  contactPhone String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  templates DrawTemplate[]
+  loans     Loan[]
+  communications BankCommunication[]
+
+  @@index([orgId])
+}
+
+model BankCommunication {
+  id        String   @id @default(cuid())
+  orgId     String
+  bankId    String
+  projectId String?
+  createdByUserId String
+
+  type      BankCommunicationType
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  bank      Bank         @relation(fields: [bankId], references: [id])
+  project   Project?     @relation(fields: [projectId], references: [id])
+  createdBy User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId, createdAt])
+  @@index([bankId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([createdByUserId])
+}
+
+model Loan {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  bankId    String
+
+  name      String
+  loanNumber String?
+  retainageBpsDefault Int @default(0)
+  totalLoanCents Int?
+  paidToDateCents Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+  bank      Bank    @relation(fields: [bankId], references: [id])
+
+  bankers   LoanBanker[]
+  drawRequests DrawRequest[]
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([bankId])
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+
+  unitNumber String
+  bedrooms   Int?
+  baths      Float?
+  sqft       Int?
+
+  rentalStatus UnitRentalStatus @default(AVAILABLE)
+  rentCents    Int?
+  marketRentCents Int?
+  availableOn  DateTime?
+
+  currentTenantName String?
+  leaseStart   DateTime?
+  leaseEnd     DateTime?
+
+  buildiumUnitId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, unitNumber])
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model Partner {
+  id        String   @id @default(cuid())
+  orgId     String
+
+  name      String
+  email     String?
+  phone     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects  ProjectPartner[]
+  llcs      LlcPartner[]
+
+  @@index([orgId])
+}
+
+model ProjectPartner {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  partnerId String
+
+  ownershipBps Int @default(0) // 10000 = 100%
+  initialInvestmentCents Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+  partner   Partner @relation(fields: [partnerId], references: [id])
+
+  @@unique([projectId, partnerId])
+  @@index([orgId])
+  @@index([projectId])
+  @@index([partnerId])
+}
+
+model ProjectPhoto {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+
+  title     String?
+  url       String
+
+  createdAt DateTime @default(now())
+
+  project   Project @relation(fields: [projectId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId, createdAt])
+}
+
+model ProjectCustomSection {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String?
+
+  title     String
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  project   Project? @relation(fields: [projectId], references: [id])
+  items     ProjectCustomSectionItem[]
+
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model ProjectCustomSectionItem {
+  id        String   @id @default(cuid())
+  orgId     String
+  sectionId String
+
+  title     String
+  url       String
+
+  createdAt DateTime @default(now())
+
+  section   ProjectCustomSection @relation(fields: [sectionId], references: [id])
+
+  @@index([orgId])
+  @@index([sectionId])
+}
+
+model LoanBanker {
+  id      String @id @default(cuid())
+  orgId   String
+  loanId  String
+  userId  String
+
+  loan    Loan @relation(fields: [loanId], references: [id])
+  user    User @relation(fields: [userId], references: [id])
+
+  @@unique([loanId, userId])
+  @@index([orgId])
+}
+
+model DrawTemplate {
+  id        String   @id @default(cuid())
+  orgId     String
+  bankId    String
+
+  name      String
+  version   Int
+  config    Json
+
+  createdAt DateTime @default(now())
+
+  bank      Bank @relation(fields: [bankId], references: [id])
+  drawRequests DrawRequest[]
+
+  @@unique([bankId, name, version])
+  @@index([orgId])
+}
+
+model DrawRequest {
+  id          String    @id @default(cuid())
+  orgId       String
+  projectId   String
+  loanId      String
+  templateId  String
+
+  status      DrawStatus @default(DRAFT)
+  lockedAt    DateTime?
+
+  // email delivery config snapshot
+  deliveryEmailTo String[]
+
+  approvedAt  DateTime?
+  approvedByUserId String?
+  approvedComment String?
+
+  fundedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+  loan      Loan    @relation(fields: [loanId], references: [id])
+  template  DrawTemplate @relation(fields: [templateId], references: [id])
+
+  lineItems DrawLineItem[]
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([loanId])
+  @@index([status])
+}
+
+model DrawLineItem {
+  id          String @id @default(cuid())
+  orgId       String
+  drawRequestId String
+
+  label       String
+  costCode    String?
+  scheduledCents Int?
+  previousDrawCents Int? @default(0)
+  thisDrawCents Int? @default(0)
+  retainageCents Int? @default(0)
+  percentComplete Int? // 0-100
+
+  commitmentId String?
+
+  createdAt DateTime @default(now())
+
+  drawRequest DrawRequest @relation(fields: [drawRequestId], references: [id])
+
+  @@index([orgId])
+  @@index([drawRequestId])
+}
+
+model QuickBooksTxn {
+  id          String @id @default(cuid())
+  orgId       String
+  qbConnectionId String
+
+  // QB identity
+  qbEntityType String
+  qbEntityId   String
+
+  projectId    String?
+  vendorId     String?
+  commitmentId String?
+
+  amountCents  Int
+  txnDate      DateTime?
+  raw          Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org          Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([qbConnectionId, qbEntityType, qbEntityId])
+  @@index([orgId])
+  @@index([qbConnectionId])
+  @@index([projectId])
+  @@index([vendorId])
+  @@index([commitmentId])
+}
+
+model Notification {
+  id        String @id @default(cuid())
+  orgId     String
+  userId    String
+
+  type      String
+  title     String
+  body      String
+  entityType String?
+  entityId   String?
+
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  org       Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
+  @@index([userId, readAt])
+}
+
+model ReportSchedule {
+  id        String   @id @default(cuid())
+  orgId     String
+  createdByUserId String
+
+  reportType ReportType
+  cadence    ReportCadence
+  recipients String[]
+  active     Boolean  @default(true)
+  lastSentAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  createdBy User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId])
+  @@index([active])
+  @@index([reportType])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  orgId     String
+  projectId String
+  createdByUserId String
+
+  body      String
+  dueAt     DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id])
+  project   Project      @relation(fields: [projectId], references: [id])
+  createdBy User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([orgId])
+  @@index([projectId, completedAt])
+  @@index([createdByUserId])
+}
+
+model IntegrationEvent {
+  id             String   @id @default(cuid())
+  orgId          String
+  qbConnectionId String
+  status         IntegrationEventStatus @default(RECEIVED)
+  source         String
+  payload        Json
+  receivedAt     DateTime @default(now())
+  processedAt    DateTime?
+  error          String?
+
+  qbConnection   QuickBooksConnection @relation(fields: [qbConnectionId], references: [id])
+
+  @@index([orgId])
+  @@index([qbConnectionId, receivedAt])
+}
+
+model QbdInstruction {
+  id             String   @id @default(cuid())
+  orgId          String
+  qbConnectionId String
+  status         QbdInstructionStatus @default(PENDING)
+  type           String
+  payload        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  error          String?
+
+  qbConnection   QuickBooksConnection @relation(fields: [qbConnectionId], references: [id])
+
+  @@index([orgId])
+  @@index([qbConnectionId, status])
+}

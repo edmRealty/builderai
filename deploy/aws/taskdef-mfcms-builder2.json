@@ -1,0 +1,45 @@
+{
+  "family": "default-mfcms-builder2",
+  "executionRoleArn": "arn:aws:iam::853583157803:role/mfcmsEcsExpressExecutionRole",
+  "networkMode": "awsvpc",
+  "runtimePlatform": { "cpuArchitecture": "ARM64", "operatingSystemFamily": "LINUX" },
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "Main",
+      "image": "853583157803.dkr.ecr.us-east-2.amazonaws.com/mfcms-builder:v20260504-221648",
+      "cpu": 512,
+      "memoryReservation": 1024,
+      "portMappings": [{ "containerPort": 3010, "hostPort": 3010, "protocol": "tcp" }],
+      "essential": true,
+      "environment": [
+        { "name": "MFA_DISABLED", "value": "true" },
+        { "name": "SEED_DEMO_DATA", "value": "true" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/DATABASE_URL-PC0Kw3"
+        },
+        {
+          "name": "SESSION_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/SESSION_SECRET-gmfJVp"
+        },
+        {
+          "name": "PASSWORD_PEPPER",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:853583157803:secret:mfcms-builder/PASSWORD_PEPPER-cCky9H"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/mfcms-builder",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
