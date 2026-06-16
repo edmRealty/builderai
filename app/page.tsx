@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import SignInPage from "@/app/(public)/signin/page";
+import SignInPage from "@/app/signin/page";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
